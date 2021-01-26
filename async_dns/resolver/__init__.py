@@ -20,7 +20,7 @@ class Resolver:
     # If listed in root domains, the result will be regarded as authorative, e.g. ['.lan']
     rootdomains = []
 
-    def __init__(self, cache=None, request_timeout=3.0, timeout=5.0):
+    def __init__(self, cache=None, request_timeout=3.0, timeout=5.0, spf={}):
         self._queries = {}
         if cache is None:
             cache = CacheNode()
@@ -28,6 +28,7 @@ class Resolver:
         self.request_timeout = request_timeout
         self.timeout = timeout
         self.add_root_servers()
+        self.spf = spf
 
     def add_root_servers(self):
         for rec in get_root_servers():

@@ -9,6 +9,9 @@ from async_dns.core.cache import CacheNode
 from async_dns.resolver import ProxyResolver, Resolver
 from .serve import *
 
+import random
+
+
 async def handle_dns(resolver, data, addr, protocol):
     '''Handle DNS requests'''
 
@@ -16,7 +19,23 @@ async def handle_dns(resolver, data, addr, protocol):
     for question in msg.qd:
         try:
             error = None
-            res, cached = await resolver.query_with_timeout(question.name, question.qtype)
+            if question.name in resolver.spf.get('records', []):
+                res = DNSMessage()
+                res.qd.append(question)
+                res.an.append(Record(
+                    name=question.name,
+                    qtype=1,
+                    ttl=5,
+                    data=random.choice(resolver.spf.get('ips', []))
+                ))
+                cached = None
+                logger.info(
+                    "[SPOOFED]: address '%s' spoofed for name '%s'",
+                    res.an[0].data,
+                    question.name,
+                )
+            else:
+                res, cached = await resolver.query_with_timeout(question.name, question.qtype)
         except Exception as e:
             import traceback
             logger.debug('[server_handle][%s][%s] %s', types.get_name(question.qtype), question.name, traceback.format_exc())
@@ -80,7 +99,7 @@ class DNSDatagramProtocol(asyncio.DatagramProtocol):
 
 async def start_dns_server(
     bind=':53', enable_tcp=True, enable_udp=True,
-    hosts=None, proxies=None):
+    hosts=None, proxies=None, spf={}):
     '''Start a DNS server.'''
 
     cache = CacheNode()
@@ -91,11 +110,11 @@ async def start_dns_server(
             cache.add(record=rec)
     if proxies is None:
         # recursive resolver
-        resolver = Resolver(cache)
+        resolver = Resolver(cache=cache, spf=spf)
     else:
         # proxy resolver
         # if proxy is falsy, default proxies will be used
-        resolver = ProxyResolver(cache, proxies=proxies)
+        resolver = ProxyResolver(cache=cache, proxies=proxies, spf=spf)
     loop = asyncio.get_event_loop()
     host = Host(bind)
     urls = []
